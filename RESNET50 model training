@@ -1,0 +1,343 @@
+from keras.models import Sequential
+from keras.layers import Dense
+from keras.wrappers.scikit_learn import KerasClassifier
+from keras.utils import np_utils
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import OneHotEncoder
+import matplotlib.pyplot as plt
+import imageio
+
+from fastai import *
+from fastai.vision import *
+from fastai.vision.all import *
+
+df = pd.read_csv('/kaggle/input/skin-cancer-mnist-ham10000/hmnist_28_28_RGB.csv')
+
+classes = { 0:'akiec',1:'bcc', 2 :'bkl',3:'df',4: 'mel',5:'nv', 6:'vasc'}
+
+df.head()
+
+df.shape
+
+df_x = df.loc[:,'pixel0000':'pixel2351']
+
+df_x
+
+df_y = df.loc[:,'label']
+
+df_y
+
+from imblearn.over_sampling import RandomOverSampler 
+oversample = RandomOverSampler()
+df_x,df_y  = oversample.fit_resample(df_x,df_y)
+df_x= np.array(df_x).reshape(-1,28,28,3)
+print('Shape of X :',df_x.shape)
+
+
+from sklearn.model_selection import train_test_split
+X_train, X_test, Y_train, Y_test = train_test_split(df_x,df_y, test_size=0.2, random_state=1)
+
+
+np_x_train = np.array(X_train)
+np_x_test = np.array(X_test)
+np_x_train.shape
+np_x_test.shape
+
+
+X_train = np.array(np_x_train).reshape(-1,28, 28,3)
+X_test = np.array(np_x_test).reshape(-1,28, 28,3)
+Y_train = np.array(Y_train)
+Y_test = np.array(Y_test)
+
+
+print("training",X_train.shape)
+print(Y_train.shape)
+print("testing",X_test.shape)
+print(Y_test.shape)
+
+
+def save_imgs(path:Path, data, labels):
+    for label in np.unique(labels):
+        (path/str(label)).mkdir(parents=True,exist_ok=True)
+    for i in range(len(data)):
+        if(len(labels)!=0):
+            image = imageio.imsave( str( path/str(labels[i])/(str(i)+'.jpg') ), data[i])
+        else:
+            image = imageio.imsave( str( path/(str(i)+'.jpg') ), data[i])
+
+save_imgs(Path('/kaggle/working/train'),X_train,Y_train)
+save_imgs(Path('/kaggle/working/test'),X_test,Y_test)
+
+
+print('total classes in train :', len(os.listdir('/kaggle/working/train')))
+print('Images with label 1: ', len(os.listdir('/kaggle/working/train/1')))
+
+print('Image names with label 1')
+print(os.listdir('/kaggle/working/train/1')[:10])
+print('total classes in test :', len(os.listdir('/kaggle/working/test')))
+print('Images with label 1: ', len(os.listdir('/kaggle/working/test/1')))
+
+print('Image names with label 1')
+print(os.listdir('/kaggle/working/test/1')[:10])
+
+
+print('total classes in train :', len(os.listdir('/kaggle/working/train')))
+print('Images with label 1: ', len(os.listdir('/kaggle/working/train/1')))
+
+print('Image names with label 1')
+print(os.listdir('/kaggle/working/train/1')[:10])
+print('total classes in test :', len(os.listdir('/kaggle/working/test')))
+print('Images with label 1: ', len(os.listdir('/kaggle/working/test/1')))
+
+print('Image names with label 1')
+print(os.listdir('/kaggle/working/test/1')[:10])
+
+tabular_data = pd.read_csv('/kaggle/input/skin-cancer-mnist-ham10000/HAM10000_metadata.csv')
+tabular_data.head()
+
+import seaborn as sns
+sns.countplot(x = 'dx', data = tabular_data)
+plt.xlabel('Disease', size=12)
+plt.ylabel('Frequency', size=12)
+plt.title('Frequency Distribution of Classes', size=16)
+
+
+
+bar, ax = plt.subplots(figsize = (10,10))
+plt.pie(tabular_data['sex'].value_counts(), labels = tabular_data['sex'].value_counts().index, autopct="%.1f%%")
+plt.title('Gender of Patient', size=16)
+
+
+value = tabular_data[['localization', 'sex']].value_counts().to_frame()
+value.reset_index(level=[1,0 ], inplace=True)
+temp = value.rename(columns = {'localization':'location', 0: 'count'})
+
+bar, ax = plt.subplots(figsize = (12, 12))
+sns.barplot(x = 'location',  y='count', hue = 'sex', data = temp)
+plt.title('Location of disease over Gender', size = 16)
+plt.xlabel('Disease', size=12)
+plt.ylabel('Frequency/Count', size=12)
+plt.xticks(rotation = 90)
+
+#import model layers
+from keras import regularizers
+from keras.models import Sequential
+from keras.layers import Dense, Dropout, Flatten, Conv2D, MaxPooling2D, MaxPool2D, BatchNormalization
+#build the model
+def build_model(backbone):
+    model = Sequential()
+    model.add(backbone)
+    model.add(layers.GlobalAveragePooling2D())
+    model.add(layers.Dropout(0.7))
+    model.add(layers.BatchNormalization())
+    model.add(layers.Dense(7, activation='softmax',kernel_regularizer=regularizers.l1_l2(l1=0.01, l2=0.001)))
+    model.compile(loss='sparse_categorical_crossentropy',optimizer="Adagrad",metrics=['accuracy'])
+    return model
+
+
+
+from keras import layers
+from keras.models import Sequential
+from keras.applications import ResNet50
+
+resnet = ResNet50(weights='imagenet',include_top=False,input_shape=(256,256,3))
+model = build_model(resnet)
+model.summary()
+
+
+model.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+
+history = model.fit_generator(generator=train_generator,epochs=25,validation_data=valid_generator)
+
+
+plt.plot(history.history['accuracy'])
+plt.plot(history.history['val_accuracy'])
+plt.title('model accuracy')
+plt.ylabel('accuracy')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'val'], loc='upper left')
+plt.show()
+
+
+loss, acc = model.evaluate(test_generator, verbose=2)
+y_pred = model.predict(test_generator)
+
+
+model.save('best_model.h5')
+
+model.save_weights('best_model_weights.h5')
+
+import tensorflow as tf
+
+model = tf.keras.models.load_model('best_model.h5')
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+tflite_model = converter.convert()
+open("best_model1.tflite", "wb").write(tflite_model)
+
+
+# Initialize empty lists to store data and labels
+all_x_test = []
+all_y_test = []
+
+for i in range(len(test_generator)):
+    x_test, y_test = train_generator[i]
+    all_x_test.append(x_test)
+    all_y_test.append(y_test)
+
+
+x_test = np.concatenate(all_x_test)
+y_test = np.concatenate(all_y_test)
+
+print("Length of y_test:", len(y_test))
+print("Length of Y_pred_classes:", len(Y_pred_classes))
+
+
+
+
+
+
+import numpy as np
+import matplotlib.pyplot as plt
+import itertools
+from sklearn.metrics import confusion_matrix
+
+# Function to plot confusion matrix    
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    fig, ax = plt.subplots(figsize=(10, 7))
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, cm[i, j],
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+
+# Predict the values from the validation dataset
+y_pred = model.predict(test_generator)
+
+# Ensure predictions and true labels have the same length
+# Convert predictions classes to one hot vectors 
+Y_pred_classes = np.argmax(y_pred, axis=1)
+
+# Assuming y_test is already defined and compatible
+# If test_generator provides labels, extract them
+x_test, y_test = test_generator.next()
+y_test_classes = np.argmax(y_test, axis=1)  # Ensure y_test is in the same format
+
+# Check and align lengths of Y_pred_classes and y_test_classes
+min_length = min(len(Y_pred_classes), len(y_test_classes))
+Y_pred_classes = Y_pred_classes[:min_length]
+y_test_classes = y_test_classes[:min_length]
+
+# Compute the confusion matrix
+confusion_mtx = confusion_matrix(y_test_classes, Y_pred_classes)
+
+# Plot the confusion matrix
+class_labels = list(classes.values())  # Ensure 'classes' is a dictionary of labels
+plot_confusion_matrix(confusion_mtx, class_labels)
+
+
+
+
+
+# Define risk rankings for each lesion type
+risk_ranking = {
+    'akiec': 4,  # High risk (pre-cancerous)
+    'bcc': 4,    # High risk (cancerous)
+    'bkl': 1,    # Low risk (benign)
+    'df': 1,     # Low risk (benign)
+    'mel': 5,    # Very high risk (melanoma)
+    'nv': 2,     # Low to moderate risk (monitor for changes)
+    'vasc': 1    # Very low risk (benign)
+}
+
+# Define further tests based on lesion type
+test_recommendations = {
+    'akiec': 'Biopsy to confirm pre-cancerous changes.',
+    'bcc': 'Biopsy and imaging to check for spread.',
+    'bkl': 'No immediate tests, regular monitoring.',
+    'df': 'No immediate tests, monitoring only.',
+    'mel': 'Urgent biopsy and lymph node assessment.',
+    'nv': 'Dermatoscopy to monitor changes.',
+    'vasc': 'No tests needed unless symptomatic.'
+}
+
+# Example function to add risk and recommendations to predictions
+def classify_and_recommend(prediction_classes, class_labels):
+    """
+    Add risk level and test recommendations to predictions.
+
+    Args:
+    prediction_classes: List of predicted class indices.
+    class_labels: Dictionary mapping indices to class names.
+
+    Returns:
+    List of dictionaries with class, risk, and test recommendations.
+    """
+    results = []
+    for pred in prediction_classes:
+        lesion_type = class_labels[pred]
+        risk_level = risk_ranking[lesion_type]
+        tests_needed = test_recommendations[lesion_type]
+        results.append({
+            'Lesion Type': lesion_type,
+            'Risk Level (0-5)': risk_level,
+            'Recommended Tests': tests_needed
+        })
+    return results
+
+# Example usage
+# Assume Y_pred_classes contains predicted class indices
+predicted_classes = [0, 4, 1, 6, 5]  # Example predictions
+class_labels = {0: 'akiec', 1: 'bcc', 2: 'bkl', 3: 'df', 4: 'mel', 5: 'nv', 6: 'vasc'}
+
+# Get the results with risk levels and recommendations
+results = classify_and_recommend(predicted_classes, class_labels)
+
+# Print results
+for result in results:
+    print(result)
+
+
+
+
+
+
+
+
+
+
+
+
+
